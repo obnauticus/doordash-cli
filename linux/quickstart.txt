@@ -30,6 +30,31 @@ Secret Service provider. On Debian/Ubuntu, the usual packages are
 `gnome-keyring`, `dbus-user-session`, and `libsecret-1-0`; log out and back in
 after installing them so PAM can unlock the keyring.
 
+Headless SSH sign-in
+--------------------
+
+The OAuth redirect is fixed to localhost:4180. If your browser runs on a
+different machine, keep an SSH local-forward open from that browser machine:
+
+  ssh -N -o ExitOnForwardFailure=yes \
+    -L 4180:127.0.0.1:4180 \
+    <user>@<linux-host>
+
+On the Linux host, use a D-Bus shell if the SSH session does not already have
+DBUS_SESSION_BUS_ADDRESS. Then unlock GNOME Keyring without placing its
+password in shell history and start login:
+
+  dbus-run-session -- bash  # only when DBUS_SESSION_BUS_ADDRESS is unset
+  read -rsp "Keyring password: " dd_keyring_password; echo
+  eval "$(printf '%s' "$dd_keyring_password" | \
+    gnome-keyring-daemon --unlock --components=secrets)"
+  unset dd_keyring_password
+  dd-cli login
+
+Open the printed authorization URL on the browser machine while the SSH tunnel
+is running. Keep the D-Bus shell open for subsequent commands. SSH public-key
+authentication does not normally unlock the login keyring through PAM.
+
 Uninstall
 ---------
 

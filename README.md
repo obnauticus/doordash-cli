@@ -72,6 +72,37 @@ keychain (for example GNOME Keyring). This matches the official CLI's rule that
 OAuth credentials must use an operating-system keychain; no plaintext token
 fallback is introduced.
 
+### Headless SSH sign-in
+
+The OAuth redirect is fixed to `http://localhost:4180/oauth2/callback`. When
+the browser and `dd-cli` run on different machines, forward that address from
+the browser machine to the Linux host. In a second terminal on the browser
+machine, keep this running (substitute the same destination used for SSH):
+
+```bash
+ssh -N -o ExitOnForwardFailure=yes \
+  -L 4180:127.0.0.1:4180 \
+  <user>@<linux-host>
+```
+
+On a headless Linux host, start a D-Bus shell first if the SSH session does not
+already have `DBUS_SESSION_BUS_ADDRESS`, then unlock GNOME Keyring without
+putting its password in shell history:
+
+```bash
+dbus-run-session -- bash  # only when DBUS_SESSION_BUS_ADDRESS is unset
+read -rsp "Keyring password: " dd_keyring_password; echo
+eval "$(printf '%s' "$dd_keyring_password" | \
+  gnome-keyring-daemon --unlock --components=secrets)"
+unset dd_keyring_password
+dd-cli login
+```
+
+Open the printed authorization URL on the browser machine. Its localhost
+callback travels through the SSH tunnel to the waiting CLI. Keep the D-Bus
+shell open for subsequent commands; an SSH session using public-key auth does
+not normally unlock the login keyring through PAM.
+
 ## Try it
 
 ```bash
