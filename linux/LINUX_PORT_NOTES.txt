@@ -29,3 +29,10 @@ Secret Service remains the default credential backend. An opt-in 1Password
 backend implements the same Python Keyring interface by calling an installed
 `op` CLI. It is restricted to the `dd-cli` / `oauth-tokens` record and sends
 secrets only through stdin JSON. The 1Password CLI is not redistributed.
+
+The Linux runner also adds `login --manual` for remote browsers. DoorDash's
+registered localhost redirect URI is unchanged. The user pastes the browser's
+final callback URL into a hidden prompt; the adapter requires the expected
+loopback host, selected callback port and path, and matching OAuth state before
+replaying the unmodified query to the original local HTTP handler. This avoids
+an SSH tunnel without weakening PKCE or state validation.

@@ -10,7 +10,7 @@ binary="$(realpath "$1")"
 expected_version="${2:-}"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 
-for command in curl file realpath seq timeout; do
+for command in curl file realpath sed seq timeout; do
     command -v "$command" >/dev/null || {
         echo "Required smoke-test command is missing: $command" >&2
         exit 1
@@ -82,6 +82,48 @@ set -e
 grep -Fq 'You can close this tab' "$callback_body"
 grep -Fq 'identity.doordash.com/authorize' "$oauth_stderr"
 grep -Fq 'Authentication/Authorization failed' "$oauth_stderr"
+
+# Exercise the no-tunnel path. It reads the browser's final localhost URL from
+# a hidden prompt and relays it to the same loopback callback server, so the
+# registered redirect URI and OAuth state validation remain unchanged.
+manual_dir="$(mktemp -d)"
+temporary_paths+=("$manual_dir")
+manual_input="$manual_dir/input"
+manual_stdout="$manual_dir/stdout"
+manual_stderr="$manual_dir/stderr"
+mkfifo "$manual_input"
+exec {manual_fd}<>"$manual_input"
+BROWSER=true timeout --signal=INT --kill-after=1 15 \
+    "$binary" login --manual <&$manual_fd >"$manual_stdout" 2>"$manual_stderr" &
+manual_pid=$!
+manual_auth_url=""
+for _attempt in $(seq 1 100); do
+    manual_auth_url="$(sed -n 's/^Open in browser: //p' "$manual_stderr" | tail -n 1)"
+    [[ -n "$manual_auth_url" ]] && break
+    sleep 0.1
+done
+manual_state="$(sed -n 's/.*[?&]state=\([^&]*\).*/\1/p' <<<"$manual_auth_url")"
+manual_port="$(sed -n 's/.*redirect_uri=http%3A%2F%2Flocalhost%3A\([0-9][0-9]*\)%2Foauth2%2Fcallback.*/\1/p' <<<"$manual_auth_url")"
+if [[ -z "$manual_state" || -z "$manual_port" ]]; then
+    kill "$manual_pid" 2>/dev/null || true
+    wait "$manual_pid" 2>/dev/null || true
+    echo "Manual OAuth flow did not print parseable callback metadata." >&2
+    exit 1
+fi
+printf '%s\n' \
+    "http://localhost:$manual_port/oauth2/callback?error=access_denied&error_description=manual-smoke&state=$manual_state" \
+    >&$manual_fd
+exec {manual_fd}>&-
+set +e
+wait "$manual_pid"
+manual_status=$?
+set -e
+[[ "$manual_status" -eq 1 ]] || {
+    echo "Manual OAuth denial returned unexpected status: $manual_status" >&2
+    exit 1
+}
+grep -Fq 'Manual callback mode' "$manual_stderr"
+grep -Fq 'Authentication/Authorization failed' "$manual_stderr"
 
 # Confirm the compiled runner can replace Secret Service with the optional
 # 1Password backend and pass the normal credential gate. The fixture exposes

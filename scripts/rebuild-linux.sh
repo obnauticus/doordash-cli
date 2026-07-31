@@ -179,9 +179,9 @@ wheel_platform="${linux_arch}-manylinux_2_17"
     'cffi==2.1.0' \
     'pycparser==3.0'
 
-echo "Testing the optional 1Password credential backend..."
+echo "Testing Linux credential and headless-login adapters..."
 PYTHONPATH="$repo_root/linux" "$work_dir/build-venv/bin/python" \
-    -m unittest discover -s "$repo_root/tests" -p 'test_onepassword_keyring.py'
+    -m unittest discover -s "$repo_root/tests" -p 'test_*.py'
 
 export DD_CLI_APP_PATH="$work_dir/app"
 export DD_CLI_METADATA_PATH="$metadata_source"

@@ -67,17 +67,31 @@ specific release, pass its version:
 bash scripts/rebuild-linux.sh 0.2.1
 ```
 
-The resulting CLI requires an unlocked Secret Service-compatible desktop
-keychain (for example GNOME Keyring). This matches the official CLI's rule that
-OAuth credentials must use an operating-system keychain; no plaintext token
-fallback is introduced.
+The resulting CLI requires either an unlocked Secret Service-compatible
+desktop keychain (for example GNOME Keyring) or the optional authenticated
+1Password CLI backend below. Both keep OAuth credentials in encrypted
+credential storage; no plaintext token fallback is introduced.
 
-### Headless SSH sign-in
+### Headless sign-in
 
 The OAuth redirect is fixed to `http://localhost:4180/oauth2/callback`. When
-the browser and `dd-cli` run on different machines, forward that address from
-the browser machine to the Linux host. In a second terminal on the browser
-machine, keep this running (substitute the same destination used for SSH):
+the browser and `dd-cli` run on different machines, the simplest option is the
+Linux build's no-tunnel manual callback mode:
+
+```bash
+dd-cli login --manual
+```
+
+Open the printed authorization URL on any computer. After sign-in, the
+browser's final localhost page may report that it cannot connect. Copy the
+complete URL from its address bar and paste it at the hidden `Callback URL`
+prompt. The CLI validates its host, port, path, and OAuth state, then relays it
+only to its own loopback listener. The value is not added to shell history or
+echoed to the terminal.
+
+An SSH tunnel remains available if you prefer an automatic browser redirect.
+In a second terminal on the browser machine, keep this running (substitute the
+same destination used for SSH):
 
 ```bash
 ssh -N -o ExitOnForwardFailure=yes \
@@ -98,10 +112,11 @@ unset dd_keyring_password
 dd-cli login
 ```
 
-Open the printed authorization URL on the browser machine. Its localhost
-callback travels through the SSH tunnel to the waiting CLI. Keep the D-Bus
-shell open for subsequent commands; an SSH session using public-key auth does
-not normally unlock the login keyring through PAM.
+For tunnel mode, run `dd-cli login` without `--manual`, then open the printed
+authorization URL on the browser machine. Its localhost callback travels
+through the tunnel. Keep the D-Bus shell open for subsequent commands; an SSH
+session using public-key auth does not normally unlock the login keyring
+through PAM. Credential storage setup is required for either callback method.
 
 ### Optional 1Password credential storage
 
@@ -118,7 +133,7 @@ export DD_CLI_CREDENTIAL_BACKEND=1password
 export DD_CLI_1PASSWORD_VAULT='<vault name or ID>'
 # Optional when more than one account is configured:
 export DD_CLI_1PASSWORD_ACCOUNT='<account shorthand or ID>'
-dd-cli login
+dd-cli login --manual
 ```
 
 On first successful login, the backend creates a Password item titled
@@ -126,8 +141,9 @@ On first successful login, the backend creates a Password item titled
 `DD_CLI_1PASSWORD_ITEM` if needed. The OAuth document is sent to `op` over
 stdin and stored only in the concealed password field—never in command
 arguments, environment variables, or temporary files. The `op` session must
-remain authenticated when running subsequent `dd-cli` commands. The SSH port
-forward above is still required when the browser runs elsewhere.
+remain authenticated when running subsequent `dd-cli` commands. Manual
+callback mode does not require an SSH port forward; omit `--manual` and use the
+tunnel above if you prefer the automatic redirect.
 
 ## Try it
 
