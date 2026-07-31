@@ -103,6 +103,32 @@ callback travels through the SSH tunnel to the waiting CLI. Keep the D-Bus
 shell open for subsequent commands; an SSH session using public-key auth does
 not normally unlock the login keyring through PAM.
 
+### Optional 1Password credential storage
+
+For a headless host, the Linux build can replace Secret Service with the
+installed [1Password CLI](https://developer.1password.com/docs/cli/). This is
+opt-in; the default remains the operating-system keychain. Sign `op` in and
+choose a vault explicitly, then export the non-secret backend configuration
+for `login` and every later command:
+
+```bash
+op signin --account <account>
+op whoami
+export DD_CLI_CREDENTIAL_BACKEND=1password
+export DD_CLI_1PASSWORD_VAULT='<vault name or ID>'
+# Optional when more than one account is configured:
+export DD_CLI_1PASSWORD_ACCOUNT='<account shorthand or ID>'
+dd-cli login
+```
+
+On first successful login, the backend creates a Password item titled
+`dd-cli OAuth Tokens`; override that non-secret title with
+`DD_CLI_1PASSWORD_ITEM` if needed. The OAuth document is sent to `op` over
+stdin and stored only in the concealed password field—never in command
+arguments, environment variables, or temporary files. The `op` session must
+remain authenticated when running subsequent `dd-cli` commands. The SSH port
+forward above is still required when the browser runs elsewhere.
+
 ## Try it
 
 ```bash

@@ -55,6 +55,29 @@ Open the printed authorization URL on the browser machine while the SSH tunnel
 is running. Keep the D-Bus shell open for subsequent commands. SSH public-key
 authentication does not normally unlock the login keyring through PAM.
 
+Optional 1Password credential storage
+-------------------------------------
+
+The Linux build can use an installed 1Password CLI instead of Secret Service.
+This is opt-in; the operating-system keychain remains the default. Sign `op`
+in, select a vault explicitly, and export the same non-secret configuration
+for login and all later commands:
+
+  op signin --account <account>
+  op whoami
+  export DD_CLI_CREDENTIAL_BACKEND=1password
+  export DD_CLI_1PASSWORD_VAULT='<vault name or ID>'
+  # Optional for multiple configured accounts:
+  export DD_CLI_1PASSWORD_ACCOUNT='<account shorthand or ID>'
+  dd-cli login
+
+The backend creates a Password item titled `dd-cli OAuth Tokens` on first
+successful login. DD_CLI_1PASSWORD_ITEM can override that non-secret title.
+The OAuth document goes to `op` over stdin and is stored only in the concealed
+password field; it is never placed in command arguments, environment
+variables, or temporary files. Keep `op` authenticated for subsequent dd-cli
+commands. The SSH tunnel above is still required for a remote browser.
+
 Uninstall
 ---------
 

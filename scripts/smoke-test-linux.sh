@@ -8,6 +8,7 @@ fi
 
 binary="$(realpath "$1")"
 expected_version="${2:-}"
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 
 for command in curl file realpath seq timeout; do
     command -v "$command" >/dev/null || {
@@ -81,6 +82,20 @@ set -e
 grep -Fq 'You can close this tab' "$callback_body"
 grep -Fq 'identity.doordash.com/authorize' "$oauth_stderr"
 grep -Fq 'Authentication/Authorization failed' "$oauth_stderr"
+
+# Confirm the compiled runner can replace Secret Service with the optional
+# 1Password backend and pass the normal credential gate. The fixture exposes
+# only a synthetic token and implements read operations; backend writes are
+# covered by the Python unit tests.
+if [[ -x "$repo_root/tests/fake-op" ]]; then
+    fake_op_dir="$(mktemp -d)"
+    temporary_paths+=("$fake_op_dir")
+    ln -s "$repo_root/tests/fake-op" "$fake_op_dir/op"
+    PATH="$fake_op_dir:$PATH" \
+        DD_CLI_CREDENTIAL_BACKEND=1password \
+        DD_CLI_1PASSWORD_VAULT='Smoke Test' \
+        "$binary" order --help | grep -Fq 'checkout-url'
+fi
 
 # When a build-time Python containing keyring is supplied, exercise the actual
 # Linux Secret Service path as well as authenticated command-group loading.

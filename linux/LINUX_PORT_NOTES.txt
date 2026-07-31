@@ -24,3 +24,8 @@ Linux-only runtime additions:
 The rebuilt binary still enforces the release's existing authentication gate,
 OAuth flow, TLS verification, MCP request construction, output sanitization,
 and ordering confirmations because those modules are unchanged.
+
+Secret Service remains the default credential backend. An opt-in 1Password
+backend implements the same Python Keyring interface by calling an installed
+`op` CLI. It is restricted to the `dd-cli` / `oauth-tokens` record and sends
+secrets only through stdin JSON. The 1Password CLI is not redistributed.
