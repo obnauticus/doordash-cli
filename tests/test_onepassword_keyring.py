@@ -8,7 +8,7 @@ import unittest
 
 from keyring.errors import KeyringError, PasswordDeleteError
 
-from onepassword_keyring import OnePasswordKeyring
+from onepassword_keyring import OnePasswordKeyring, verify_access_for_invocation
 
 
 class FakeOp:
@@ -20,6 +20,10 @@ class FakeOp:
         input_text = kwargs.get("input")
         self.calls.append((command, input_text))
         operation = command[1:3]
+        if command[1] == "whoami":
+            return self._result({"account_uuid": "test-account"})
+        if operation == ["vault", "get"]:
+            return self._result({"id": "test-vault", "name": "Test Vault"})
         if operation == ["item", "list"]:
             items = (
                 []
@@ -106,6 +110,37 @@ class OnePasswordKeyringTests(unittest.TestCase):
         with self.assertRaises(KeyringError) as raised:
             backend.set_password("dd-cli", "oauth-tokens", secret)
         self.assertNotIn(secret, str(raised.exception))
+
+    def test_verify_access_checks_account_and_vault(self) -> None:
+        self.backend.verify_access()
+        self.assertTrue(any(command[1] == "whoami" for command, _ in self.fake.calls))
+        self.assertTrue(
+            any(command[1:3] == ["vault", "get"] for command, _ in self.fake.calls)
+        )
+
+    def test_invocation_preflight_reports_signin_failure(self) -> None:
+        def failing_runner(command, **kwargs):
+            return subprocess.CompletedProcess(command, 1, "", "signed out")
+
+        backend = OnePasswordKeyring(
+            vault="Test Vault",
+            executable="/test/bin/op",
+            process_runner=failing_runner,
+        )
+        with self.assertRaisesRegex(SystemExit, "verify the signed-in account"):
+            verify_access_for_invocation(backend, ["login"], {})
+
+    def test_invocation_preflight_skips_help_and_completion(self) -> None:
+        def unexpected_runner(*_args, **_kwargs):
+            raise AssertionError("metadata commands must not access 1Password")
+
+        backend = OnePasswordKeyring(
+            vault="Test Vault",
+            executable="/test/bin/op",
+            process_runner=unexpected_runner,
+        )
+        verify_access_for_invocation(backend, ["login", "--help"], {})
+        verify_access_for_invocation(backend, ["login"], {"_DD_CLI_COMPLETE": "bash_source"})
 
 
 if __name__ == "__main__":

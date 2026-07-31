@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -106,6 +107,18 @@ class OnePasswordKeyring(KeyringBackend):
             document,
         )
 
+    def verify_access(self) -> None:
+        """Fail before OAuth if the account session or vault is unavailable."""
+
+        self._run_json(
+            "verify the signed-in account",
+            ["whoami", "--format=json"],
+        )
+        self._run_json(
+            "access the configured vault",
+            ["vault", "get", self._vault, "--format=json"],
+        )
+
     def _find_item_id(self) -> str | None:
         items = self._run_json(
             "list credentials",
@@ -192,13 +205,15 @@ class OnePasswordKeyring(KeyringBackend):
             raise KeyringError("The 1Password backend is restricted to dd-cli OAuth credentials")
 
 
-def configure_from_environment(environ: Mapping[str, str] | None = None) -> None:
+def configure_from_environment(
+    environ: Mapping[str, str] | None = None,
+) -> OnePasswordKeyring | None:
     """Select the opt-in 1Password backend before dd_cli imports keyring."""
 
     values = os.environ if environ is None else environ
     selection = values.get("DD_CLI_CREDENTIAL_BACKEND", "").strip().lower()
     if not selection:
-        return
+        return None
     if selection not in {"1password", "onepassword", "op"}:
         raise SystemExit(
             "Error: DD_CLI_CREDENTIAL_BACKEND must be unset or one of: 1password, onepassword, op"
@@ -211,11 +226,34 @@ def configure_from_environment(environ: Mapping[str, str] | None = None) -> None
     executable = shutil.which("op")
     if executable is None:
         raise SystemExit("Error: the 1Password CLI (`op`) is not installed or is not on PATH")
-    keyring.set_keyring(
-        OnePasswordKeyring(
-            vault=vault,
-            item=values.get("DD_CLI_1PASSWORD_ITEM", _DEFAULT_ITEM),
-            account=values.get("DD_CLI_1PASSWORD_ACCOUNT"),
-            executable=executable,
-        )
+    backend = OnePasswordKeyring(
+        vault=vault,
+        item=values.get("DD_CLI_1PASSWORD_ITEM", _DEFAULT_ITEM),
+        account=values.get("DD_CLI_1PASSWORD_ACCOUNT"),
+        executable=executable,
     )
+    keyring.set_keyring(backend)
+    return backend
+
+
+def verify_access_for_invocation(
+    backend: OnePasswordKeyring | None,
+    arguments: Sequence[str] | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> None:
+    """Check live 1Password access for commands that can consume credentials."""
+
+    if backend is None:
+        return
+    command_arguments = list(sys.argv[1:] if arguments is None else arguments)
+    values = os.environ if environ is None else environ
+    if (
+        not command_arguments
+        or any(argument in {"--help", "-h", "--version"} for argument in command_arguments)
+        or any(name.endswith("_COMPLETE") for name in values)
+    ):
+        return
+    try:
+        backend.verify_access()
+    except KeyringError as exc:
+        raise SystemExit(f"Error: {exc}") from None
