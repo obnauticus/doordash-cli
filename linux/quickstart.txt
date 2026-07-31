@@ -9,7 +9,7 @@ Linux equivalents.
 Requirements
 ------------
 
-- 64-bit glibc Linux (x86_64 or aarch64, matching the archive name)
+- 64-bit glibc 2.17+ Linux (x86_64 or aarch64, matching the archive name)
 - A desktop Secret Service keychain, such as GNOME Keyring, unlocked in the
   current login session
 - An approved DoorDash CLI account

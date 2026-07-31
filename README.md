@@ -49,7 +49,7 @@ shasum -a 256 dd-cli-v<version>-darwin-arm64.tar.gz
 
 ## Linux rebuild
 
-On a 64-bit glibc Linux host (x86_64 or aarch64), run:
+On a 64-bit glibc 2.17+ Linux host (x86_64 or aarch64), run:
 
 ```bash
 bash scripts/rebuild-linux.sh
@@ -58,9 +58,10 @@ bash scripts/rebuild-linux.sh
 The script selects the latest official macOS ARM64 release, verifies its
 published SHA256 digest, extracts the architecture-neutral Python package,
 recreates its exact dependency set on a matching Linux Python runtime, builds
-a native executable, exercises its command surface and Linux Secret Service
-credential path, and writes a binary plus installable archive under `dist/`.
-To rebuild a specific release, pass its version:
+a native executable against the manylinux2014 baseline, audits its bundled ELF
+libraries, exercises its command surface and Linux Secret Service credential
+path, and writes a binary plus installable archive under `dist/`. To rebuild a
+specific release, pass its version:
 
 ```bash
 bash scripts/rebuild-linux.sh 0.2.1

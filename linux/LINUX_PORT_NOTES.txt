@@ -8,6 +8,11 @@ against a matching Linux Python runtime, recreates the exact dependency
 versions listed by the release, and adds the Secret Service support needed by
 Python Keyring on Linux.
 
+Native wheels are selected for the manylinux2014 (glibc 2.17) baseline. The
+build audits every bundled ELF shared object and rejects anything requiring a
+newer glibc. The target system supplies `libgcc_s.so.1`, as required by the
+manylinux platform contract, rather than receiving the build host's copy.
+
 Linux-only runtime additions:
 
 - SecretStorage 3.5.0 (BSD-3-Clause)

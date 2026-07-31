@@ -18,7 +18,7 @@ case "$(uname -m)" in
         ;;
 esac
 
-for command in curl file sha256sum tar python3; do
+for command in curl file objdump sha256sum tar python3; do
     command -v "$command" >/dev/null || {
         echo "Error: required command is missing: $command" >&2
         exit 1
@@ -165,9 +165,11 @@ export UV_CACHE_DIR="$work_dir/uv-cache"
 export UV_PYTHON_INSTALL_DIR="$work_dir/python"
 export UV_PYTHON_BIN_DIR="$work_dir/python-bin"
 uv_bin="$work_dir/bootstrap-venv/bin/uv"
+wheel_platform="${linux_arch}-manylinux_2_17"
 "$uv_bin" python install "$release_python"
 "$uv_bin" venv --managed-python --python "$release_python" "$work_dir/build-venv"
 "$uv_bin" pip install --python "$work_dir/build-venv/bin/python" \
+    --python-platform "$wheel_platform" \
     'pyinstaller==6.21.0' \
     'pyinstaller-hooks-contrib==2026.6' \
     "${release_requirements[@]}" \
@@ -177,20 +179,40 @@ uv_bin="$work_dir/bootstrap-venv/bin/uv"
     'cffi==2.1.0' \
     'pycparser==3.0'
 
+export DD_CLI_APP_PATH="$work_dir/app"
+export DD_CLI_METADATA_PATH="$metadata_source"
+export DD_CLI_RUNNER_PATH="$repo_root/linux/runner.py"
 "$work_dir/build-venv/bin/pyinstaller" \
     --noconfirm \
     --clean \
-    --onefile \
-    --name dd-cli \
-    --paths "$work_dir/app" \
-    --add-data "$metadata_source:dd_cli-$version.dist-info" \
-    --collect-submodules keyring.backends \
     --distpath "$work_dir/pyinstaller-dist" \
     --workpath "$work_dir/pyinstaller-build" \
-    --specpath "$work_dir" \
-    "$repo_root/linux/runner.py"
+    "$repo_root/linux/dd-cli.spec"
 
 built_binary="$work_dir/pyinstaller-dist/dd-cli"
+
+echo "Auditing bundled ELF compatibility..."
+mkdir -p "$work_dir/artifact-audit"
+(
+    cd "$work_dir/artifact-audit"
+    "$work_dir/bootstrap-venv/bin/pyinstxtractor-ng" "$built_binary" >/dev/null
+)
+audit_root="$work_dir/artifact-audit/dd-cli_extracted"
+if find "$audit_root" -type f -name 'libgcc_s.so*' -print -quit | grep -q .; then
+    echo "Error: the build bundled its host libgcc instead of using the target system's." >&2
+    exit 1
+fi
+while IFS= read -r elf_file; do
+    required_glibc="$(objdump -T "$elf_file" 2>/dev/null \
+        | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)+' | sed 's/^GLIBC_//' | sort -Vu | tail -1 || true)"
+    [[ -z "$required_glibc" ]] && continue
+    highest="$(printf '%s\n' '2.17' "$required_glibc" | sort -V | tail -1)"
+    if [[ "$highest" != "2.17" ]]; then
+        echo "Error: $(basename "$elf_file") requires glibc $required_glibc (maximum: 2.17)." >&2
+        exit 1
+    fi
+done < <(find "$audit_root" -type f \( -name '*.so' -o -name '*.so.*' \) -print)
+
 KEYRING_PYTHON="$work_dir/build-venv/bin/python" \
     "$repo_root/scripts/smoke-test-linux.sh" "$built_binary" "$version"
 
