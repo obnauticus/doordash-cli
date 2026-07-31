@@ -222,8 +222,11 @@ output_binary="$repo_root/dist/$artifact_stem"
 output_archive="$repo_root/dist/$artifact_stem.tar.gz"
 install -m 0755 "$built_binary" "$output_binary"
 tar --create --gzip --file "$output_archive" --directory "$work_dir/package" "$artifact_stem"
-sha256sum "$output_binary" >"$output_binary.sha256"
-sha256sum "$output_archive" >"$output_archive.sha256"
+(
+    cd "$repo_root/dist"
+    sha256sum "$artifact_stem" >"$artifact_stem.sha256"
+    sha256sum "$artifact_stem.tar.gz" >"$artifact_stem.tar.gz.sha256"
+)
 
 echo
 echo "Linux rebuild complete:"
