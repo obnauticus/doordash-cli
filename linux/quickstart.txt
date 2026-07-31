@@ -1,0 +1,39 @@
+DoorDash CLI for Linux
+=======================
+
+This is a Linux rebuild of the official macOS ARM64 release. It keeps the
+release's architecture-neutral Python application bytecode and replaces the
+macOS interpreter, bootloader, TLS integration, and keychain backend with
+Linux equivalents.
+
+Requirements
+------------
+
+- 64-bit glibc Linux (x86_64 or aarch64, matching the archive name)
+- A desktop Secret Service keychain, such as GNOME Keyring, unlocked in the
+  current login session
+- An approved DoorDash CLI account
+
+Install
+-------
+
+  bash install.sh
+  export PATH="$HOME/.local/bin:$PATH"
+  dd-cli --version
+  dd-cli login
+
+The login command opens a browser and stores OAuth credentials in the Linux
+desktop keychain. There is deliberately no plaintext credential fallback.
+
+If dd-cli reports "Keychain unavailable", start or unlock your desktop's
+Secret Service provider. On Debian/Ubuntu, the usual packages are
+`gnome-keyring`, `dbus-user-session`, and `libsecret-1-0`; log out and back in
+after installing them so PAM can unlock the keyring.
+
+Uninstall
+---------
+
+  rm "$HOME/.local/bin/dd-cli"
+
+Removing the binary does not remove the `dd-cli` / `oauth-tokens` entry from
+your desktop keychain.

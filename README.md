@@ -6,6 +6,11 @@ DoorDash CLI (`dd-cli`) is a terminal tool for ordering from DoorDash — search
 
 Currently supported: **macOS, Apple Silicon (M1/M2/M3/M4)**.
 
+This repository also contains a community Linux rebuild workflow. It preserves
+the official release's packaged Python application bytecode and replaces its
+macOS-only runtime and keychain adapter with Linux equivalents. See
+[Linux rebuild](#linux-rebuild) below.
+
 ## Download
 
 1. Go to the [Releases page](https://github.com/doordash-oss/doordash-cli/releases) and open the latest release.
@@ -41,6 +46,30 @@ To compute the checksum of your download:
 ```bash
 shasum -a 256 dd-cli-v<version>-darwin-arm64.tar.gz
 ```
+
+## Linux rebuild
+
+On a 64-bit glibc Linux host (x86_64 or aarch64), run:
+
+```bash
+bash scripts/rebuild-linux.sh
+```
+
+The script selects the latest official macOS ARM64 release, verifies its
+published SHA256 digest, extracts the architecture-neutral Python package,
+recreates its exact dependency set on a matching Linux Python runtime, builds
+a native executable, exercises its command surface and Linux Secret Service
+credential path, and writes a binary plus installable archive under `dist/`.
+To rebuild a specific release, pass its version:
+
+```bash
+bash scripts/rebuild-linux.sh 0.2.1
+```
+
+The resulting CLI requires an unlocked Secret Service-compatible desktop
+keychain (for example GNOME Keyring). This matches the official CLI's rule that
+OAuth credentials must use an operating-system keychain; no plaintext token
+fallback is introduced.
 
 ## Try it
 
