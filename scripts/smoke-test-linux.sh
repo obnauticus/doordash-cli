@@ -10,7 +10,7 @@ binary="$(realpath "$1")"
 expected_version="${2:-}"
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 
-for command in curl file realpath sed seq timeout; do
+for command in curl env file realpath sed seq setsid timeout; do
     command -v "$command" >/dev/null || {
         echo "Required smoke-test command is missing: $command" >&2
         exit 1
@@ -53,7 +53,11 @@ oauth_stdout="$(mktemp)"
 oauth_stderr="$(mktemp)"
 callback_body="$(mktemp)"
 temporary_paths+=("$oauth_stdout" "$oauth_stderr" "$callback_body")
-BROWSER=true timeout --signal=INT --kill-after=1 15 \
+env -u DD_CLI_CREDENTIAL_BACKEND \
+    -u DD_CLI_1PASSWORD_VAULT \
+    -u DD_CLI_1PASSWORD_ACCOUNT \
+    -u DD_CLI_1PASSWORD_ITEM \
+    BROWSER=true timeout --signal=INT --kill-after=1 15 \
     "$binary" login >"$oauth_stdout" 2>"$oauth_stderr" &
 oauth_pid=$!
 callback_received=0
@@ -93,8 +97,14 @@ manual_stdout="$manual_dir/stdout"
 manual_stderr="$manual_dir/stderr"
 mkfifo "$manual_input"
 exec {manual_fd}<>"$manual_input"
-BROWSER=true timeout --signal=INT --kill-after=1 15 \
-    "$binary" login --manual <&$manual_fd >"$manual_stdout" 2>"$manual_stderr" &
+# Detach the controlling TTY so getpass reads the synthetic URL from the FIFO.
+env -u DD_CLI_CREDENTIAL_BACKEND \
+    -u DD_CLI_1PASSWORD_VAULT \
+    -u DD_CLI_1PASSWORD_ACCOUNT \
+    -u DD_CLI_1PASSWORD_ITEM \
+    BROWSER=true timeout --signal=INT --kill-after=1 15 \
+    setsid --wait "$binary" login --manual \
+    <&$manual_fd >"$manual_stdout" 2>"$manual_stderr" &
 manual_pid=$!
 manual_auth_url=""
 for _attempt in $(seq 1 100); do
@@ -133,7 +143,9 @@ if [[ -x "$repo_root/tests/fake-op" ]]; then
     fake_op_dir="$(mktemp -d)"
     temporary_paths+=("$fake_op_dir")
     ln -s "$repo_root/tests/fake-op" "$fake_op_dir/op"
-    PATH="$fake_op_dir:$PATH" \
+    env -u DD_CLI_1PASSWORD_ACCOUNT \
+        -u DD_CLI_1PASSWORD_ITEM \
+        PATH="$fake_op_dir:$PATH" \
         DD_CLI_CREDENTIAL_BACKEND=1password \
         DD_CLI_1PASSWORD_VAULT='Smoke Test' \
         "$binary" order --help | grep -Fq 'checkout-url'
@@ -148,6 +160,8 @@ if [[ -n "${KEYRING_PYTHON:-}" ]] && command -v dbus-run-session >/dev/null \
     export smoke_home binary
     dbus-run-session -- bash -c '
         set -euo pipefail
+        unset DD_CLI_CREDENTIAL_BACKEND DD_CLI_1PASSWORD_VAULT \
+            DD_CLI_1PASSWORD_ACCOUNT DD_CLI_1PASSWORD_ITEM
         export HOME="$smoke_home"
         eval "$(printf linux-smoke-keyring | gnome-keyring-daemon --unlock --components=secrets)"
         "$KEYRING_PYTHON" -c '\''import keyring; keyring.set_password("dd-cli", "oauth-tokens", "{\"access_token\":\"smoke\",\"refresh_token\":\"smoke\",\"expires_at\":4102444800}")'\''
